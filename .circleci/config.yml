@@ -1,120 +1,37 @@
+# JavaScript Node CircleCI 2.0 configuration file
+#
+# Check https://circleci.com/docs/2.0/language-javascript/ for more details
+#
 version: 2
-
-defaults: &defaults
-  docker:
-    - image: circleci/node:dubnium
-  working_directory: ~/space-kit
-
 jobs:
-  chromatic:
-    <<: *defaults
+  build:
+    docker:
+      # specify the version you desire here
+      - image: circleci/node:7.10
+
+      # Specify service dependencies here if necessary
+      # CircleCI maintains a library of pre-built images
+      # documented at https://circleci.com/docs/2.0/circleci-images/
+      # - image: circleci/mongo:3.4.4
+
+    working_directory: ~/repo
+
     steps:
       - checkout
-      - run:
-          name: Install npm dependencies
-          command: npm ci
+
+      # Download and cache dependencies
       - restore_cache:
-          name: Restore storybook cache
           keys:
-            - storybook-cache--{{ .Branch }}--{{ checksum ".circleci/config.yml" }}
-            - storybook-cache--master--{{ checksum ".circleci/config.yml" }}
-      - run:
-          name: Run Chromatic
-          command: npm run chromatic -- --exit-zero-on-changes --auto-accept-changes=master
-          environment:
-            CI: 1
+            - v1-dependencies-{{ checksum "package.json" }}
+            # fallback to using the latest cache if no exact match is found
+            - v1-dependencies-
+
+      - run: yarn install
+
       - save_cache:
-          name: Save chromatic cache
-          key: storybook-cache--{{ .Branch }}--{{ checksum ".circleci/config.yml" }}--{{ epoch }}
           paths:
-            - node_modules/.cache/storybook
-  eslint:
-    <<: *defaults
-    steps:
-      - checkout
-      - run:
-          name: Install npm dependencies
-          command: npm ci
-      - run:
-          name: Ensure output directory exists
-          command: mkdir -p /tmp/test-reports/eslint
-      - run:
-          name: Eslint
-          command: npm run lint -- --no-cache --format junit --output-file /tmp/test-reports/eslint/results.xml
-      - store_test_results:
-          path: /tmp/test-reports
+            - node_modules
+          key: v1-dependencies-{{ checksum "package.json" }}
 
-  # This is disabled until we can figure out how to re-run the job when a PR is labeled or unlabeled. We were using GitHub Actions, but those are no longer available to us.
-  # check-label:
-  #   <<: *defaults
-  #   steps:
-  #     - checkout
-  #     - run:
-  #         name: Check labels
-  #         command: npx auto pr-check --pr ${CIRCLE_PULL_REQUEST##*/} --url ${CIRCLE_BUILD_URL}
-
-  release:
-    <<: *defaults
-    steps:
-      - checkout
-      - add_ssh_keys:
-          fingerprints:
-            # see https://circleci.com/gh/apollographql/space-kit/edit#checkout
-            - "c3:d8:f4:b7:55:5c:70:72:51:21:8c:e1:63:92:ce:92"
-      - run:
-          name: Add NPM_TOKEN to `.npmrc`
-          command: echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > ~/space-kit/.npmrc
-      - run:
-          name: Install npm dependencies
-          command: npm ci
-      - run:
-          name: Release
-          command: npm run release
-
-  test:
-    <<: *defaults
-    steps:
-      - checkout
-      - run:
-          name: Install npm dependencies
-          command: npm ci
-      - run:
-          name: Test
-          command: npm run test:unit:coverage -- --silent --maxWorkers=2 --ci
-      - store_artifacts:
-          name: Store coverage artifacts
-          path: coverage
-
-  typescript:
-    <<: *defaults
-    steps:
-      - checkout
-      - run:
-          name: Install npm dependencies
-          command: npm ci
-      - run:
-          name: TypeScript
-          command: npm run test:typescript
-
-workflows:
-  version: 2
-  test:
-    jobs:
-      - chromatic
-      - eslint
-      - typescript
-      - test
-      # - check-label:
-      #     filters:
-      #       branches:
-      #         ignore:
-      #           - master
-      - release:
-          requires:
-            - eslint
-            - typescript
-            - test
-          filters:
-            branches:
-              only:
-                - master
+      # run tests!
+      - run: yarn test
